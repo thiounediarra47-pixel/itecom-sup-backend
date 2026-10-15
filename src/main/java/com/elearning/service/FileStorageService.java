@@ -1,0 +1,82 @@
+package com.elearning.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
+
+@Service
+@Slf4j
+public class FileStorageService {
+
+    @Value("${app.upload.dir}")
+    private String uploadDir;
+
+    /**
+     * Stores the file under uploadDir/subDirectory with a generated unique name
+     * and returns the public URL (served via /uploads/**).
+     */
+    public String store(MultipartFile file, String subDirectory) throws IOException {
+        Path targetDir = Paths.get(uploadDir, subDirectory).toAbsolutePath().normalize();
+        Files.createDirectories(targetDir);
+
+        String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
+        String extension = "";
+        int dotIndex = originalFilename.lastIndexOf('.');
+        if (dotIndex >= 0) {
+            extension = originalFilename.substring(dotIndex);
+        }
+        String filename = UUID.randomUUID() + extension;
+
+        Path targetPath = targetDir.resolve(filename);
+        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+        return "/uploads/" + subDirectory + "/" + filename;
+    }
+
+    /** Reads back a file stored by this service, from its public URL (/uploads/...). */
+    public byte[] read(String url) throws IOException {
+        if (url == null || !url.startsWith("/uploads/")) throw new IOException("URL de fichier invalide : " + url);
+        Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path path = root.resolve(url.substring("/uploads/".length())).normalize();
+        if (!path.startsWith(root)) throw new IOException("URL de fichier invalide : " + url);
+        return Files.readAllBytes(path);
+    }
+
+    /** Le fichier existe-t-il encore sur le disque ? (un redéploiement sans volume persistant l'efface) */
+    public boolean exists(String url) {
+        if (url == null || !url.startsWith("/uploads/")) return false;
+        Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path path = root.resolve(url.substring("/uploads/".length())).normalize();
+        return path.startsWith(root) && Files.isRegularFile(path);
+    }
+
+    /** Supprime un fichier stocké par ce service, à partir de son URL publique (/uploads/...). Sans effet s'il n'existe pas. */
+    public void delete(String url) {
+        if (url == null || !url.startsWith("/uploads/")) return;
+        Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path path = root.resolve(url.substring("/uploads/".length())).normalize();
+        if (!path.startsWith(root)) return;
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            log.warn("Suppression impossible de {} : {}", url, e.getMessage());
+        }
+    }
+
+    /** Stores raw bytes (e.g. a generated PDF) under uploadDir/subDirectory and returns the public URL. */
+    public String storeBytes(byte[] data, String subDirectory, String extension) throws IOException {
+        Path targetDir = Paths.get(uploadDir, subDirectory).toAbsolutePath().normalize();
+        Files.createDirectories(targetDir);
+        String filename = UUID.randomUUID() + extension;
+        Files.write(targetDir.resolve(filename), data);
+        return "/uploads/" + subDirectory + "/" + filename;
+    }
+}
