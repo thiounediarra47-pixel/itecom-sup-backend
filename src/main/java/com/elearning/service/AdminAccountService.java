@@ -63,8 +63,10 @@ public class AdminAccountService {
             user.setSubjects(required(in.subjects(), "Au moins une matière"));
         }
 
-        String email = emailDomainChecker.check(in.email());
-        if (!email.equalsIgnoreCase(user.getEmail())) {
+        // L'email n'est vérifié (format, domaine) que s'il change : l'adresse actuelle reste valable telle quelle
+        String requested = required(in.email(), "L'email");
+        if (!requested.equalsIgnoreCase(user.getEmail())) {
+            String email = emailDomainChecker.check(requested);
             if (userRepository.findByEmail(email).isPresent()) {
                 throw new IllegalArgumentException("Un compte existe déjà avec l'email " + email + ".");
             }
