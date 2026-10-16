@@ -193,29 +193,38 @@ public class AdminUsersController {
         return ResponseEntity.ok(Map.of("message", "Compte réactivé."));
     }
 
-    /** Création du compte d'un étudiant inscrit par la scolarité : mot de passe généré et envoyé par email. */
+    /**
+     * Accès d'un étudiant inscrit : mot de passe généré et envoyé à son email d'inscription.
+     * Compte à créer → activé ; étudiant inscrit avant ce fonctionnement (déjà actif) → nouveau mot de passe.
+     */
     @PostMapping("/{id}/create-account")
     @Transactional
     public ResponseEntity<?> createAccount(@PathVariable Long id) {
         User user = userRepository.findById(id).orElseThrow();
-        if (user.getRole() != Role.ROLE_STUDENT || !"ACCOUNT_PENDING".equals(user.getRegistrationStatus())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Le compte de cet étudiant existe déjà."));
+        if (user.getRole() != Role.ROLE_STUDENT) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Ce compte n'est pas un compte étudiant."));
+        }
+        boolean pending = "ACCOUNT_PENDING".equals(user.getRegistrationStatus());
+        if (!pending && !user.isEnabled()) {
+            return ResponseEntity.badRequest().body(Map.of("message",
+                "Le compte de " + user.getFirstName() + " " + user.getLastName() + " est désactivé : réactivez-le d'abord."));
         }
         String password = com.elearning.service.PasswordGenerator.generate();
         user.setPassword(passwordEncoder.encode(password));
         user.setEnabled(true);
         user.setRegistrationStatus("APPROVED");
         userRepository.save(user);
-        examService.enrollNewStudent(user);
+        if (pending) examService.enrollNewStudent(user);
         String emailError = emailService.sendAccountCreated(user.getEmail(), user.getFirstName(), "étudiant", password);
         boolean emailSent = emailError == null;
+        String done = pending ? "Compte créé" : "Nouveau mot de passe généré";
 
         return ResponseEntity.ok(Map.of(
             "user", UserDto.from(user),
             "emailSent", emailSent,
             "message", emailSent
-                ? "Compte créé. Les identifiants ont été envoyés à " + user.getEmail() + "."
-                : "Compte créé, mais l'email n'a pas pu être envoyé : " + emailError
+                ? done + ". Les identifiants ont été envoyés à " + user.getEmail() + "."
+                : done + ", mais l'email n'a pas pu être envoyé : " + emailError
                     + ". Communiquez les identifiants manuellement (mot de passe : " + password + ").",
             "password", emailSent ? "" : password));
     }
