@@ -78,9 +78,20 @@ public class ExamSubmissionService {
             .toList();
     }
 
-    public ExamTakeResponse getExamByToken(String token) {
+    /**
+     * Le lien d'examen s'ouvre sans connexion : il est refusé aussi quand le compte de l'étudiant
+     * a été désactivé par l'administrateur.
+     */
+    private ExamStudent findAccessible(String token) {
         ExamStudent student = examStudentRepository.findByAccessToken(token)
             .orElseThrow(() -> new RuntimeException("Token d'accès invalide"));
+        boolean disabled = userRepository.findByEmail(student.getStudentEmail()).map(u -> !u.isEnabled()).orElse(false);
+        if (disabled) throw new com.elearning.exception.AccountDisabledException();
+        return student;
+    }
+
+    public ExamTakeResponse getExamByToken(String token) {
+        ExamStudent student = findAccessible(token);
 
         Exam exam = student.getExam();
         if (exam.getStatus() != ExamStatus.PUBLISHED) {
@@ -122,8 +133,7 @@ public class ExamSubmissionService {
 
     @Transactional
     public ExamTakeResponse startExam(String token) {
-        ExamStudent student = examStudentRepository.findByAccessToken(token)
-            .orElseThrow(() -> new RuntimeException("Token d'accès invalide"));
+        ExamStudent student = findAccessible(token);
 
         if (student.getStatus() == StudentExamStatus.SUBMITTED || student.getStatus() == StudentExamStatus.GRADED) {
             throw new IllegalStateException("Vous avez déjà soumis cet examen");
@@ -152,8 +162,7 @@ public class ExamSubmissionService {
 
     @Transactional
     public void submitExam(String token, ExamSubmitRequest request) {
-        ExamStudent student = examStudentRepository.findByAccessToken(token)
-            .orElseThrow(() -> new RuntimeException("Token d'accès invalide"));
+        ExamStudent student = findAccessible(token);
 
         if (student.getStatus() == StudentExamStatus.SUBMITTED || student.getStatus() == StudentExamStatus.GRADED) {
             throw new IllegalStateException("Vous avez déjà soumis cet examen");

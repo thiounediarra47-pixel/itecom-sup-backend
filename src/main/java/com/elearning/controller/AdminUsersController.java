@@ -26,6 +26,7 @@ public class AdminUsersController {
     private final PasswordEncoder passwordEncoder;
     private final com.elearning.service.ExamService examService;
     private final com.elearning.service.EmailDomainChecker emailDomainChecker;
+    private final com.elearning.service.AdminAccountService accountService;
 
     @Data
     static class CreateUserInput {
@@ -125,7 +126,7 @@ public class AdminUsersController {
         String specialization; String bio; String avatarUrl;
         String role; String registrationStatus; boolean enabled;
         LocalDateTime createdAt;
-        String birthDate; String birthPlace; String level; String subjects;
+        String birthDate; String birthPlace; String level; String subjects; String phone;
 
         static UserDto from(User u) {
             UserDto d = new UserDto();
@@ -136,7 +137,7 @@ public class AdminUsersController {
             d.registrationStatus = u.getRegistrationStatus();
             d.enabled = u.isEnabled(); d.createdAt = u.getCreatedAt();
             d.birthDate = u.getBirthDate() != null ? u.getBirthDate().toString() : null;
-            d.birthPlace = u.getBirthPlace(); d.level = u.getLevel(); d.subjects = u.getSubjects();
+            d.birthPlace = u.getBirthPlace(); d.level = u.getLevel(); d.subjects = u.getSubjects(); d.phone = u.getPhone();
             return d;
         }
     }
@@ -227,6 +228,28 @@ public class AdminUsersController {
                 : done + ", mais l'email n'a pas pu être envoyé : " + emailError
                     + ". Communiquez les identifiants manuellement (mot de passe : " + password + ").",
             "password", emailSent ? "" : password));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody com.elearning.service.AdminAccountService.AccountUpdate input) {
+        try {
+            return ResponseEntity.ok(UserDto.from(accountService.update(id, input)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, String>> delete(@PathVariable Long id) throws java.io.IOException {
+        try {
+            accountService.delete(id);
+            return ResponseEntity.ok(Map.of("message", "Compte supprimé."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            return ResponseEntity.badRequest().body(Map.of("message",
+                "Ce compte est encore lié à d'autres données : il ne peut pas être supprimé. Désactivez-le plutôt."));
+        }
     }
 
     private static boolean isStudentOrTeacher(User user) {
