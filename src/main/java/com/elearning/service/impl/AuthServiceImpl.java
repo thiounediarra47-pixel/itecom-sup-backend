@@ -5,6 +5,7 @@ import com.elearning.dto.request.RegisterRequest;
 import com.elearning.dto.response.*;
 import com.elearning.entity.User;
 import com.elearning.exception.AccountBlockedException;
+import com.elearning.exception.AccountDisabledException;
 import com.elearning.repository.UserRepository;
 import com.elearning.security.jwt.JwtUtils;
 import com.elearning.service.AuthService;
@@ -74,8 +75,17 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse login(LoginRequest request) {
-        Authentication auth = authenticationManager.authenticate(
-            new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+        Authentication auth;
+        try {
+            auth = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+        } catch (DisabledException e) {
+            // Compte validé puis désactivé par l'admin (≠ inscription en attente de paiement)
+            boolean approved = userRepository.findByEmail(request.getEmail())
+                .map(u -> "APPROVED".equals(u.getRegistrationStatus())).orElse(false);
+            if (approved) throw new AccountDisabledException();
+            throw e;
+        }
 
         User user = userRepository.findByEmail(request.getEmail())
             .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));

@@ -36,6 +36,12 @@ public class GlobalExceptionHandler {
             .body(ApiResponse.error("Compte en attente de validation. L'administrateur activera votre compte après vérification du paiement."));
     }
 
+    @ExceptionHandler(AccountDisabledException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountDisabled(AccountDisabledException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(ApiResponse.error("Votre compte a été désactivé par l'administration. Contactez l'administrateur pour le réactiver."));
+    }
+
     @ExceptionHandler(AccountBlockedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccountBlocked(AccountBlockedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)

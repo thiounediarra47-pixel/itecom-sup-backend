@@ -166,6 +166,9 @@ public class AdminUsersController {
     @Transactional
     public ResponseEntity<Map<String, String>> disable(@PathVariable Long id) {
         User user = userRepository.findById(id).orElseThrow();
+        if (!isStudentOrTeacher(user)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Seuls les comptes étudiant ou professeur peuvent être désactivés."));
+        }
         user.setEnabled(false);
         userRepository.save(user);
         return ResponseEntity.ok(Map.of("message", "Compte désactivé."));
@@ -175,8 +178,15 @@ public class AdminUsersController {
     @Transactional
     public ResponseEntity<Map<String, String>> enable(@PathVariable Long id) {
         User user = userRepository.findById(id).orElseThrow();
+        if (!isStudentOrTeacher(user)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Seuls les comptes étudiant ou professeur peuvent être réactivés."));
+        }
         user.setEnabled(true);
         userRepository.save(user);
         return ResponseEntity.ok(Map.of("message", "Compte réactivé."));
+    }
+
+    private static boolean isStudentOrTeacher(User user) {
+        return user.getRole() == Role.ROLE_STUDENT || user.getRole() == Role.ROLE_TEACHER;
     }
 }

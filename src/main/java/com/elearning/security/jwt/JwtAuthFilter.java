@@ -45,6 +45,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     return;
                 }
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+                // Compte désactivé par l'admin : le jeton déjà émis n'ouvre plus l'accès
+                if (!userDetails.isEnabled()) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
