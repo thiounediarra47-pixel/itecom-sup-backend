@@ -43,8 +43,6 @@ public class SchoolAdmissionService {
     private final UserRepository userRepository;
     private final SchoolDocumentRepository documentRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
-    private final ExamService examService;
     private final EmailDomainChecker emailDomainChecker;
 
     @Value("${app.school.documents-dir:school-documents/}")
@@ -56,7 +54,7 @@ public class SchoolAdmissionService {
 
     public record DocumentView(Long id, String type, String typeLabel, String originalName, long size, LocalDateTime uploadedAt) {}
 
-    public record Admission(SchoolService.EnrollmentView enrollment, boolean emailSent, String message, String password) {}
+    public record Admission(SchoolService.EnrollmentView enrollment, String message) {}
 
     @Transactional
     public Admission admit(NewStudent in, MultipartFile bacAttestation, MultipartFile bacTranscript,
@@ -93,17 +91,18 @@ public class SchoolAdmissionService {
             checkPdf(successAttestation, "l'attestation de réussite de l'établissement d'origine");
         }
 
-        String password = PasswordGenerator.generate();
+        // Inscription sans accès : aucun mot de passe n'est donné ; l'administrateur crée le compte
+        // ensuite (Étudiants et professeurs), ce qui génère le mot de passe et l'envoie.
         String level = SchoolService.normalizeLevel(in.level());
         String specialization = in.specialization() == null || in.specialization().isBlank() ? null : in.specialization().trim();
         User student = userRepository.save(User.builder()
             .firstName(firstName).lastName(lastName).email(email)
-            .password(passwordEncoder.encode(password))
+            .password(passwordEncoder.encode(UUID.randomUUID().toString()))
             .role(Role.ROLE_STUDENT)
             .birthDate(birthDate).birthPlace(birthPlace)
             .phone(phone)
             .specialization(specialization).level(level)
-            .enabled(true).registrationStatus("APPROVED")
+            .enabled(false).registrationStatus("ACCOUNT_PENDING")
             .build());
 
         SchoolEnrollment enrollment = schoolService.enroll(student.getId(), in.academicYear(), level, specialization,
@@ -124,14 +123,9 @@ public class SchoolAdmissionService {
             throw ex;
         }
 
-        examService.enrollNewStudent(student);
-        String emailError = emailService.sendAccountCreated(email, firstName, "étudiant", password);
-        boolean sent = emailError == null;
-        return new Admission(schoolService.view(enrollment), sent,
-            sent ? "Étudiant inscrit (matricule " + enrollment.getMatricule() + "). Ses identifiants ont été envoyés à " + email + "."
-                 : "Étudiant inscrit (matricule " + enrollment.getMatricule() + "), mais l'email n'a pas pu être envoyé : " + emailError
-                   + ". Communiquez-lui ses identifiants.",
-            sent ? "" : password);
+        return new Admission(schoolService.view(enrollment),
+            "Étudiant inscrit (matricule " + enrollment.getMatricule() + "). Créez son compte dans « Étudiants et professeurs » "
+                + "pour lui envoyer son mot de passe.");
     }
 
     public List<DocumentView> documents(SchoolEnrollment e) {

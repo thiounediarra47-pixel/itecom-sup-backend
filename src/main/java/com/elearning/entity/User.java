@@ -39,6 +39,7 @@ public class User {
     private LocalDateTime blockedUntil;
 
     // Inscription avec paiement : EMAIL_PENDING → PAYMENT_PENDING → PAYMENT_SUBMITTED → APPROVED / REJECTED
+    // Inscription par la scolarité : ACCOUNT_PENDING (sans accès) → APPROVED quand l'admin crée le compte
     @Column(nullable = false, columnDefinition = "VARCHAR(50) DEFAULT 'APPROVED'") @Builder.Default
     private String registrationStatus = "EMAIL_PENDING";
     private String paymentMethod;   // WAVE | ORANGE_MONEY

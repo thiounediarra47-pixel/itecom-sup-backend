@@ -16,6 +16,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByRegistrationStatusOrderByCreatedAtDesc(String registrationStatus);
     long countByRegistrationStatus(String registrationStatus);
     List<User> findByRoleAndRegistrationStatusOrderByCreatedAtDesc(com.elearning.entity.Role role, String registrationStatus);
+    List<User> findByRoleAndRegistrationStatusInOrderByCreatedAtDesc(com.elearning.entity.Role role, java.util.Collection<String> registrationStatuses);
     List<User> findByEnrolledCoursesContaining(com.elearning.entity.Course course);
     List<User> findByRoleAndRegistrationStatusAndLevelIn(com.elearning.entity.Role role, String registrationStatus, java.util.Collection<String> levels);
     long countByRoleAndRegistrationStatus(com.elearning.entity.Role role, String registrationStatus);

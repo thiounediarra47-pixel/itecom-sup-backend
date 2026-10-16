@@ -81,9 +81,10 @@ public class AuthServiceImpl implements AuthService {
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
         } catch (DisabledException e) {
             // Compte validé puis désactivé par l'admin (≠ inscription en attente de paiement)
-            boolean approved = userRepository.findByEmail(request.getEmail())
-                .map(u -> "APPROVED".equals(u.getRegistrationStatus())).orElse(false);
-            if (approved) throw new AccountDisabledException();
+            String status = userRepository.findByEmail(request.getEmail()).map(User::getRegistrationStatus).orElse(null);
+            if ("APPROVED".equals(status)) throw new AccountDisabledException();
+            // Étudiant inscrit dont le compte n'est pas encore créé : il n'a pas de mot de passe
+            if ("ACCOUNT_PENDING".equals(status)) throw new BadCredentialsException("Compte non créé");
             throw e;
         }
 

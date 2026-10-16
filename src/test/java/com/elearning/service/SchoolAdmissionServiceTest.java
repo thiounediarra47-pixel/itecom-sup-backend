@@ -28,15 +28,13 @@ class SchoolAdmissionServiceTest {
     private final SchoolService school = mock(SchoolService.class);
     private final UserRepository users = mock(UserRepository.class);
     private final SchoolDocumentRepository documents = mock(SchoolDocumentRepository.class);
-    private final EmailService email = mock(EmailService.class);
-    private final ExamService exams = mock(ExamService.class);
     private SchoolAdmissionService service;
 
     @BeforeEach
     void setUp() {
         EmailDomainChecker domains = new EmailDomainChecker();
         ReflectionTestUtils.setField(domains, "enabled", false);   // pas d'appel DNS en test
-        service = new SchoolAdmissionService(school, users, documents, new BCryptPasswordEncoder(4), email, exams, domains);
+        service = new SchoolAdmissionService(school, users, documents, new BCryptPasswordEncoder(4), domains);
         ReflectionTestUtils.setField(service, "documentsDir", dir.toString());
         when(users.findByEmail(any())).thenReturn(Optional.empty());
         when(users.findByBirthDateAndLastNameIgnoreCaseAndFirstNameIgnoreCase(any(), any(), any())).thenReturn(List.of());
@@ -56,7 +54,7 @@ class SchoolAdmissionServiceTest {
     }
 
     @Test
-    void newBachelorGetsAccountEnrollmentAndBothBacDocuments() throws Exception {
+    void newBachelorGetsEnrollmentAndBothBacDocumentsButNoAccess() throws Exception {
         var result = service.admit(student("NEW_BACHELOR", "1958-02-01"), pdf("bac.pdf"), pdf("releve-bac.pdf"), null, null);
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
@@ -67,15 +65,16 @@ class SchoolAdmissionServiceTest {
         assertEquals("Thiès", u.getBirthPlace());
         assertEquals("+221 77 123 45 67", u.getPhone());
         assertEquals(Role.ROLE_STUDENT, u.getRole());
-        assertTrue(u.isEnabled());
+        // Pas d'accès tant que l'admin n'a pas créé le compte (qui génère et envoie le mot de passe)
+        assertFalse(u.isEnabled());
+        assertEquals("ACCOUNT_PENDING", u.getRegistrationStatus());
         verify(school).enroll(12L, "2026-2027", "L1", "comptabilite", null, null, null);
 
         ArgumentCaptor<SchoolDocument> docs = ArgumentCaptor.forClass(SchoolDocument.class);
         verify(documents, times(2)).save(docs.capture());
         assertEquals(List.of("BAC_ATTESTATION", "BAC_TRANSCRIPT"), docs.getAllValues().stream().map(SchoolDocument::getType).toList());
         for (SchoolDocument d : docs.getAllValues()) assertTrue(Files.exists(dir.resolve(d.getStoredName())));
-        verify(email).sendAccountCreated(eq("awa.diop@test.com"), eq("Awa"), eq("étudiant"), anyString());
-        assertTrue(result.emailSent());
+        assertTrue(result.message().contains("ITC26-L1-0004"));
     }
 
     @Test

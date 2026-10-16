@@ -58,8 +58,11 @@ public class AdminUsersController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
-        if (userRepository.findByEmail(email).isPresent()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Un compte existe déjà avec l'email " + email + "."));
+        java.util.Optional<User> existing = userRepository.findByEmail(email);
+        if (existing.isPresent()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "ACCOUNT_PENDING".equals(existing.get().getRegistrationStatus())
+                ? existing.get().getFirstName() + " " + existing.get().getLastName() + " est déjà inscrit(e) : utilisez « Créer le compte » sur sa ligne."
+                : "Un compte existe déjà avec l'email " + email + "."));
         }
         Role role = "TEACHER".equalsIgnoreCase(input.role) ? Role.ROLE_TEACHER : Role.ROLE_STUDENT;
         java.time.LocalDate birthDate = null;
@@ -140,8 +143,9 @@ public class AdminUsersController {
 
     @GetMapping("/students")
     public ResponseEntity<List<UserDto>> getStudents() {
+        // Avec les étudiants inscrits par la scolarité dont le compte reste à créer
         List<UserDto> result = userRepository
-            .findByRoleAndRegistrationStatusOrderByCreatedAtDesc(Role.ROLE_STUDENT, "APPROVED")
+            .findByRoleAndRegistrationStatusInOrderByCreatedAtDesc(Role.ROLE_STUDENT, List.of("APPROVED", "ACCOUNT_PENDING"))
             .stream().map(UserDto::from).collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
@@ -181,9 +185,39 @@ public class AdminUsersController {
         if (!isStudentOrTeacher(user)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Seuls les comptes étudiant ou professeur peuvent être réactivés."));
         }
+        if ("ACCOUNT_PENDING".equals(user.getRegistrationStatus())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Ce compte n'est pas encore créé : utilisez « Créer le compte »."));
+        }
         user.setEnabled(true);
         userRepository.save(user);
         return ResponseEntity.ok(Map.of("message", "Compte réactivé."));
+    }
+
+    /** Création du compte d'un étudiant inscrit par la scolarité : mot de passe généré et envoyé par email. */
+    @PostMapping("/{id}/create-account")
+    @Transactional
+    public ResponseEntity<?> createAccount(@PathVariable Long id) {
+        User user = userRepository.findById(id).orElseThrow();
+        if (user.getRole() != Role.ROLE_STUDENT || !"ACCOUNT_PENDING".equals(user.getRegistrationStatus())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Le compte de cet étudiant existe déjà."));
+        }
+        String password = com.elearning.service.PasswordGenerator.generate();
+        user.setPassword(passwordEncoder.encode(password));
+        user.setEnabled(true);
+        user.setRegistrationStatus("APPROVED");
+        userRepository.save(user);
+        examService.enrollNewStudent(user);
+        String emailError = emailService.sendAccountCreated(user.getEmail(), user.getFirstName(), "étudiant", password);
+        boolean emailSent = emailError == null;
+
+        return ResponseEntity.ok(Map.of(
+            "user", UserDto.from(user),
+            "emailSent", emailSent,
+            "message", emailSent
+                ? "Compte créé. Les identifiants ont été envoyés à " + user.getEmail() + "."
+                : "Compte créé, mais l'email n'a pas pu être envoyé : " + emailError
+                    + ". Communiquez les identifiants manuellement (mot de passe : " + password + ").",
+            "password", emailSent ? "" : password));
     }
 
     private static boolean isStudentOrTeacher(User user) {

@@ -152,7 +152,8 @@ public class QcmController {
         for (QcmStudent s : students) {
             userRepo.findByEmail(s.getStudentEmail())
                 .filter(u -> u.getRole() == Role.ROLE_STUDENT)
-                .filter(u -> !u.isEnabled() || !"APPROVED".equals(u.getRegistrationStatus()))
+                // Ni un compte désactivé par l'admin, ni un étudiant inscrit dont le compte reste à créer
+                .filter(u -> !"APPROVED".equals(u.getRegistrationStatus()) && !"ACCOUNT_PENDING".equals(u.getRegistrationStatus()))
                 .ifPresent(u -> {
                     u.setEnabled(true);
                     u.setRegistrationStatus("APPROVED");
